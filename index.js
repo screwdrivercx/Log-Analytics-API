@@ -1,33 +1,18 @@
-var app = require('express')();
-var http = require('http').Server(app);
-var io = require('socket.io')(http);
- 
-io.on('connection', function(socket){
-    console.log('Client connection received');
+const cors = require('cors');
+const express = require('express');
+const app = express();
+const server = require('http').Server(app);
+const io = require('socket.io')(server);
+const netdiagRequest = require('./routes/netdiagRequest')(io);
 
-    socket.emit('sendToClient', { hello: 'world' });
+app.use(cors())
+app.use(express.json());
+app.use('/api/netdiagRequest', netdiagRequest);
 
-    socket.on('receivedFromClient', (data) => {
-        console.log(data);
-    });
+app.get('/', (req, res) => {
+    res.status(200).send({
+      message: 'Log Analytics API routes'
+    })
 });
 
-app.get('/netdiag', function(req, res){
-    res.sendFile(__dirname + '/index.html');
-});
-
-app.get('/netdiag-chunk', function(req, res){
-    res.sendFile(__dirname + '/index.html');
-});
-
-app.get('/radiuslog', function(req, res){
-    res.sendFile(__dirname + '/index.html');
-});
-
-app.get('/radiuslog-chunk', function(req, res){
-    res.sendFile(__dirname + '/index.html');
-});
- 
-http.listen(3000, function(){
-    console.log('HTTP server started on port 3000');
-});
+server.listen(4002);
