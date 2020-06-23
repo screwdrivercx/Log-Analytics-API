@@ -1,42 +1,97 @@
 const express = require('express');
 const router = express.Router();
+const ss = require('socket.io-stream');
+const fs = require('fs');
+const { json } = require('express');
 
-module.exports = function(io) {
+module.exports = function (io) {
 
-    //we define the variables
-    var sendResponse = function () {};
-    var sessionID;
+    var jsondata;
+    var filename = 'real-time.log';
+    var sendResponse = function () { };
 
-    io.sockets.on("connection",function(socket){
+    function logtoJSON() {
+        var text = fs.readFileSync('real-time.log', 'utf8')
+        array = text.split("\n");
+        var dataArray = [];
+
+        for (var i = 0; i < array.length; i++) {
+            if (array[i] == '') { continue }
+            let tempArray = [];
+            tempArray = array[i].split(",");
+            dataArray.push(tempArray)
+        }
+
+        var json = {};
+        var c = 1;
+        dataArray.forEach((e1) => {
+            var tempjson = {};
+            var i = 0;
+            e1.forEach((e2) => {
+                if (i == 0)
+                    tempjson['date'] = e2;
+                else if (i == 1)
+                    tempjson['auth'] = e2;
+                else if (i == 2)
+                    tempjson['username'] = e2;
+                else if (i == 3)
+                    tempjson['browser'] = e2;
+                else if (i == 4)
+                    tempjson['ip'] = e2;
+                else if (i == 5)
+                    tempjson['bw'] = e2;
+                i++;
+            })
+            json[c] = tempjson;
+            c++
+        });
+
+        return json;
+    }
+
+    io.sockets.on("connection", function (socket) {
         // Everytime a client logs in, display a connected message
         console.log("Server-Client Connected!");
 
-        sessionID = sessionID == null ? socket.id : sessionID;
-
-        socket.on('connected', function(data) {
-            //listen to event at anytime (not only when endpoint is called)
-            //execute some code here
+        socket.on('join', (room) => {
+            console.log("joined" + room);
+            socket.join(room);
         });
 
-        socket.on('netdiagResponse', data => {
-            //calling a function which is inside the router so we can send a res back
-            console.log(JSON.stringify(data) + "received from Netdiag.js");
-            sendResponse(data);
-        })     
+        ss(socket).on('netdiagResponse', stream => {
+            //console.log(JSON.stringify(data) + "received from Netdiag.js");
+            //sendResponse(data);
+            stream.pipe(fs.createWriteStream(filename));
+            stream.on('end', () => {
+                console.log('file received');
+                jsondata = logtoJSON();
+                sendResponse(jsondata);
+            })
+        })
+        
+        ss(socket).on('netdiagResponseUpdate', stream => {
+            //console.log(JSON.stringify(data) + "received from Netdiag.js");
+            //sendResponse(data);
+            stream.pipe(fs.createWriteStream(filename));
+            stream.on('end', () => {
+                console.log('file received');
+                jsondata = logtoJSON();
+                io.emit('netdiagDataUpdate',jsondata);
+            })
+        })
     });
 
     router.get('/', (req, res) => {
         res.status(200).send({
-          message: 'Netdiag routes'
+            message: 'Netdiag routes'
         })
     });
 
     router.get('/real-time', async (req, res) => {
-        console.log(sessionID);
-        io.to(sessionID).emit('netdiagRequest', req.body);
+        io.to('netdiagjs').emit('netdiagRequest', req.body);
 
         sendResponse = function (data) {
-                return res.status(200).json(data);
+            return res.status(200).json(data);
         }
     });
 
