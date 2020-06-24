@@ -10,7 +10,7 @@ function createResponse(socket) {
     })
     ss(socket).emit('netdiagResponse', stream);
     fs.createReadStream(filename).pipe(stream);
-    //setTimeout(function () { createResponse(socket) }, 1000);
+    setTimeout(function () { createResponseUpdate(socket) }, 10000);
 }
 
 function createResponseUpdate(socket) {
