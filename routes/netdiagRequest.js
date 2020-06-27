@@ -2,15 +2,15 @@ const express = require('express');
 const router = express.Router();
 const ss = require('socket.io-stream');
 const fs = require('fs');
+const { connected } = require('process');
 
 module.exports = function (io) {
 
     var jsondata;
-    var filename = 'real-time.log';
     var sendResponse = function () { };
 
-    function logtoJSON() {
-        var text = fs.readFileSync('real-time.log', 'utf8')
+    function logtoJSON(filename) {
+        var text = fs.readFileSync(filename, 'utf8')
         array = text.split("\n");
         var dataArray = [];
 
@@ -49,34 +49,46 @@ module.exports = function (io) {
     }
 
     io.sockets.on("connection", function (socket) {
+        var connected = false;
         // Everytime a client logs in, display a connected message
         console.log("Server-Client Connected!");
 
-        socket.on('join', (room) => {
+        socket.on('join', (room) => { //for netdiag.js
             console.log("joined" + room);
             socket.join(room);
         });
 
-        ss(socket).on('netdiagResponse', stream => {
-            //console.log(JSON.stringify(data) + "received from Netdiag.js");
-            //sendResponse(data);
+        ss(socket).on('netdiagResponseRealtime', stream => { //for client
+            filename = 'real-time.log'
             stream.pipe(fs.createWriteStream(filename));
             stream.on('end', () => {
                 console.log('file received');
-                jsondata = logtoJSON();
+                jsondata = logtoJSON(filename);
+            })
+
+            if(!connected){ //handshaking
+                console.log('handshaking success');
+                sendResponse(jsondata);
+                connected = true;
+            }
+            else{ //connected
+                console.log("Update")
+                socket.emit('netdiagDataUpdate',jsondata);
+            }    
+        })
+
+        ss(socket).on('netdiagResponse', data => { //for client
+            console.log(data.filename);
+            if(data.stream != null){
+                data.stream.pipe(fs.createWriteStream(data.filename));
+                data.stream.on('end', () => {
+                console.log('file received');
+                jsondata = logtoJSON(data.filename);
                 sendResponse(jsondata);
             })
-        })
-        
-        ss(socket).on('netdiagResponseUpdate', stream => {
-            //console.log(JSON.stringify(data) + "received from Netdiag.js");
-            //sendResponse(data);
-            stream.pipe(fs.createWriteStream(filename));
-            stream.on('end', () => {
-                console.log('file received');
-                jsondata = logtoJSON();
-                io.emit('netdiagDataUpdate',jsondata);
-            })
+            }else{
+                sendErrResponse({error: 'No Such File or Directory for '+ data.filename});
+            }
         })
     });
 
@@ -87,12 +99,24 @@ module.exports = function (io) {
     });
 
     router.get('/real-time', async (req, res) => {
-        io.to('netdiagjs').emit('netdiagRequest', req.body);
+        io.to('netdiagjs').emit('netdiagRequestRealtime', req.body);
 
         sendResponse = function (data) {
             return res.status(200).json(data);
         }
     });
+
+    router.get('/:year/:month/:date', (req, res) => {
+        io.to('netdiagjs').emit('netdiagRequest', req.params)
+
+        sendResponse = function (data) {
+            return res.status(200).json(data);
+        }
+
+        sendErrResponse = function (data){
+            return res.status(404).json(data);
+        }
+    })
 
     return router;
 };
