@@ -3,6 +3,7 @@ const router = express.Router();
 const ss = require('socket.io-stream');
 const fs = require('fs');
 const { connected } = require('process');
+const { json } = require('express');
 
 module.exports = function (io) {
 
@@ -64,30 +65,29 @@ module.exports = function (io) {
             stream.on('end', () => {
                 console.log('file received');
                 jsondata = logtoJSON(filename);
+                if (!connected) { //handshaking
+                    console.log('handshaking success');
+                    sendResponse(jsondata);
+                    connected = true;
+                }
+                else { //connected
+                    console.log("Update")
+                    socket.emit('netdiagDataUpdate', jsondata);
+                }
             })
-
-            if(!connected){ //handshaking
-                console.log('handshaking success');
-                sendResponse(jsondata);
-                connected = true;
-            }
-            else{ //connected
-                console.log("Update")
-                socket.emit('netdiagDataUpdate',jsondata);
-            }    
         })
 
         ss(socket).on('netdiagResponse', data => { //for client
             console.log(data.filename);
-            if(data.stream != null){
+            if (data.stream != null) {
                 data.stream.pipe(fs.createWriteStream(data.filename));
                 data.stream.on('end', () => {
-                console.log('file received');
-                jsondata = logtoJSON(data.filename);
-                sendResponse(jsondata);
-            })
-            }else{
-                sendErrResponse({error: 'No Such File or Directory for '+ data.filename});
+                    console.log('file received');
+                    jsondata = logtoJSON(data.filename);
+                    sendResponse(jsondata);
+                })
+            } else {
+                sendErrResponse({ error: 'No Such File or Directory for ' + data.filename });
             }
         })
     });
@@ -113,7 +113,7 @@ module.exports = function (io) {
             return res.status(200).json(data);
         }
 
-        sendErrResponse = function (data){
+        sendErrResponse = function (data) {
             return res.status(404).json(data);
         }
     })

@@ -29,7 +29,7 @@ var socket = ioClient.connect("http://localhost:4002");
 socket.emit('join', 'netdiagjs');
 
 socket.on('netdiagRequestRealtime', (req) => {
-    filename = 'current.log'
+    filename = 'current.log';
     console.log("received request for Real-time log");
     //***change this setInterval to onUpdate() to provide realtime log data
     setInterval(() => createResponseRealtime(socket, filename), 10000);
