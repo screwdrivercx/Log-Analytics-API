@@ -29,17 +29,17 @@ module.exports = function (io) {
             var i = 0;
             e1.forEach((e2) => {
                 if (i == 0)
-                    tempjson['date'] = e2;
+                    tempjson['time'] = e2;
                 else if (i == 1)
-                    tempjson['auth'] = e2;
+                    tempjson['userStatus'] = e2;
                 else if (i == 2)
-                    tempjson['username'] = e2;
+                    tempjson['userID'] = e2;
                 else if (i == 3)
-                    tempjson['browser'] = e2;
+                    tempjson['platform'] = e2;
                 else if (i == 4)
-                    tempjson['ip'] = e2;
+                    tempjson['IPaddress'] = e2;
                 else if (i == 5)
-                    tempjson['bw'] = e2;
+                    tempjson['speed'] = e2;
                 i++;
             })
             json[c] = tempjson;
@@ -60,34 +60,40 @@ module.exports = function (io) {
         });
 
         ss(socket).on('netdiagResponseRealtime', stream => { //for client
-            filename = 'real-time.log'
-            stream.pipe(fs.createWriteStream(filename));
-            stream.on('end', () => {
-                console.log('file received');
-                jsondata = logtoJSON(filename);
-                if (!connected) { //handshaking
-                    console.log('handshaking success');
-                    sendResponse(jsondata);
-                    connected = true;
-                }
-                else { //connected
-                    console.log("Update")
-                    socket.emit('netdiagDataUpdate', jsondata);
-                }
-            })
+            filename = 'netdiag-real-time.log'
+            if (stream != null) {
+                stream.pipe(fs.createWriteStream(filename));
+                stream.on('end', () => {
+                    console.log('file received');
+                    jsondata = logtoJSON(filename);
+                    if (!connected) { //handshaking
+                        console.log('handshaking success');
+                        sendResponse(jsondata);
+                        connected = true;
+                    }
+                    else { //connected
+                        console.log("Update")
+                        socket.emit('netdiagDataUpdate', jsondata);
+                    }
+                })
+            } else {
+                sendErrResponse({ error: 'No Such File or Directory for ' + filename});
+            }
+
         })
 
         ss(socket).on('netdiagResponse', data => { //for client
-            console.log(data.filename);
+            filename = "log-"+data.filename;
+            console.log(filename);
             if (data.stream != null) {
-                data.stream.pipe(fs.createWriteStream(data.filename));
+                data.stream.pipe(fs.createWriteStream(filename));
                 data.stream.on('end', () => {
                     console.log('file received');
-                    jsondata = logtoJSON(data.filename);
+                    jsondata = logtoJSON(filename);
                     sendResponse(jsondata);
                 })
             } else {
-                sendErrResponse({ error: 'No Such File or Directory for ' + data.filename });
+                sendErrResponse({ error: 'No Such File or Directory for ' + filename });
             }
         })
     });
@@ -104,16 +110,24 @@ module.exports = function (io) {
         sendResponse = function (data) {
             return res.status(200).json(data);
         }
+
+        sendErrResponse = function (data) {
+            return res.status(404).json(data);
+        }
     });
 
     router.get('/:year/:month/:date', (req, res) => {
         io.to('netdiagjs').emit('netdiagRequest', req.params)
-
+        var sent = false;
         sendResponse = function (data) {
-            return res.status(200).json(data);
+            if(!sent){
+                sent = true;
+                return res.status(200).json(data);
+            }
         }
 
         sendErrResponse = function (data) {
+            sent = true;
             return res.status(404).json(data);
         }
     })
