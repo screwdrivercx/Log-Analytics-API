@@ -1,60 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const ss = require('socket.io-stream');
-const fs = require('fs');
-const { connected } = require('process');
-const { json } = require('express');
 
-module.exports = function (io) {
-
-    var sendResponse = function () { };
-
-    io.sockets.on("connection", function (socket) {
-        var connected = false;
-        // Everytime a client logs in, display a connected message
-        console.log("Server-Client Connected!");
-
-        socket.on('join', (room) => { //for radiuslog.js
-            console.log("joined" + room);
-            socket.join(room);
-        });
-
-        ss(socket).on('radlogResponseRealtime', stream => { //for client
-            filename = 'radlog-real-time.log'
-            if (stream != null) {
-                stream.pipe(fs.createWriteStream(filename));
-                stream.on('end', () => {
-                    console.log('file received');
-                    if (!connected) { //handshaking
-                        console.log('handshaking success');
-                        sendResponse(filename);
-                        connected = true;
-                    }
-                    else { //connected
-                        console.log("Update")
-                        socket.emit('radlogDataUpdate', jsondata);
-                    }
-                })
-            } else {
-                sendErrResponse({ error: 'No Such File or Directory for ' + filename });
-            }
-
-        })
-
-        ss(socket).on('radlogResponse', data => { //for client
-            console.log(data.filename);
-            if (data.stream != null) {
-                data.stream.pipe(fs.createWriteStream(data.filename));
-                data.stream.on('end', () => {
-                    console.log('file received');
-                    sendResponse(data.filename);
-                })
-            } else {
-                sendErrResponse({ error: 'No Such File or Directory for ' + data.filename });
-            }
-        })
-    });
-
+module.exports = function () {
     router.get('/', (req, res) => {
         res.status(200).send({
             message: 'radlog routes'
@@ -62,26 +9,57 @@ module.exports = function (io) {
     });
 
     router.get('/real-time', async (req, res) => {
-        io.to('radlogjs').emit('radlogRequestRealtime', req.body);
+        filename = 'real-time';
+        console.log("received request for real-time radius log");
 
-        sendResponse = function (filename) {
-            return res.download('./' + filename);
-        }
-
-        sendErrResponse = function (filename) {
-            return res.status(404).json(filename);
-        }
+        const file = './radius-logs/real-time';
+        res.download(file, (err)=>{
+            if(res.headersSent){
+                console.log('header sent');
+            } else {
+                res.status(404).send('No such file or directory for '+filename);
+            }
+        });
     });
 
     router.get('/:year/:month/:date', (req, res) => {
-        io.to('radlogjs').emit('radlogRequest', req.params)
+        filename = 'auth-detail-'+req.params.year + req.params.month + req.params.date;
+        console.log("received request for " + filename);
 
-        sendResponse = function (filename) {
-            return res.download('./' + filename, filename);
-        }
+        const file = './radius-logs/'+filename;
+        res.download(file, (err)=>{
+            if(res.headersSent){
+                console.log('header sent');
+            } else {
+                res.status(404).send('No such file or directory for '+filename);
+            }
+        });
+    })
 
-        sendErrResponse = function (filename) {
-            return res.status(404).json(filename);
+    
+    router.post('/upload', async (req, res) => {
+        try{
+            if(!req.files){
+                res.send({
+                    status: false,
+                    message: 'No file Uploaded'
+                });
+            } else {
+                let logfile = req.files.logfile;
+
+                logfile.mv('./radius-logs/'+logfile.name);
+
+                res.send({
+                    status: true,
+                    message: 'File is Uploaded',
+                    data: {
+                        name: logfile.name,
+                        size: logfile.size
+                    }
+                });
+            }
+        } catch(err){
+            res.status(500).send(err);
         }
     })
 
